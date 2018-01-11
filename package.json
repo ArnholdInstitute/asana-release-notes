@@ -1,0 +1,12 @@
+{
+  "name": "asana-release-notes",
+  "version": "0.0.1",
+  "description": "Generate release notes from an Asana export",
+  "main": "index.js",
+  "author": "Kyle Landell <kyle.landell@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "csvtojson": "^1.1.9",
+    "prompt": "^1.0.0"
+  }
+}
