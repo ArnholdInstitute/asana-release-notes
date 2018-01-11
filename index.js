@@ -25,12 +25,12 @@ prompt.get([{
       // generate the release document
       const notes =
       `# Version ${version} Release Notes
-      Tasks may be viewed directly on Asana via \`https://app.asana.com/0/430541393561890/{itemID}\`
+      Tasks may be viewed directly on Asana by clicking on the task ID link
       &nbsp;
       ##### Items completed:
       ${items.sort(({ taskId: a }, { taskId: b }) => a > b ? 1 : (a < b ? -1 : 0))
         .map(({ taskId, name }) => (
-          `* \`${taskId}\` - ${name}`
+          `* [\`${taskId}\`](https://app.asana.com/0/430541393561890/${taskId}) - ${name}`
         )).join('\n')}
       `.replace(/ {2,}/g, ''); // replace groups of 2 or more spaces with an empty string for proper formatting
 
