@@ -2,7 +2,13 @@ const chalk = require('chalk');
 const csv = require('csvtojson');
 const fetch = require('node-fetch');
 const fs = require('fs');
+const marked= require('marked');
 const prompt = require('prompt');
+const { promisify } = require('util');
+const { wrapBody } = require('./template');
+
+const writeFile = promisify(fs.writeFile);
+const toHTML = promisify(marked);
 
 // load in environment variables
 require('dotenv').config()
@@ -63,8 +69,8 @@ const getTasks = async (tagId) => {
 };
 
 // generates release notes from the Asana tasks
-const genNotes = (version, tasks = []) => {
-  const notes =
+const genNotes = async (version, tasks = []) => {
+  const md =
   `# Version ${version} Release Notes
   Tasks may be viewed directly on Asana by clicking on their taskId
   &nbsp;
@@ -75,10 +81,25 @@ const genNotes = (version, tasks = []) => {
     )).join('\n')}
   `.replace(/ {2,}/g, ''); // replace groups of 2 or more spaces with an empty string for proper formatting
 
-  // write the file out to the releases directory
-  fs.writeFile(`./releases/v${version}.md`, notes, (err) => {
-    if (err) throw err;
-  });
+  // write the markdown file out to the releases directory
+  try {
+    await writeFile(`./releases/v${version}.md`, md);
+    console.log(chalk.green(`Release notes written to ./releases/v${version}.md`));
+  } catch (err) {
+    logError(`An error occurred while writing ./releases/v${version}.md`);
+  }
+
+  // convert the markdown to html and write to the releases directory
+  try {
+    const body = await toHTML(md.replace(/&nbsp;/g, '<br><br>'));
+    const html = wrapBody(body);
+
+    // write the html file out to the releases directory
+    await writeFile(`./releases/v${version}.html`, html);
+    console.log(chalk.green(`Release notes written to ./releases/v${version}.html`));
+  } catch (err) {
+    logError(`An error occurred while writing ./releases/v${version}.html`);
+  }
 }
 
 // prompt the user for a version string
@@ -104,8 +125,7 @@ prompt.get([{
     const tagId = await getTagId(`v${version}`);
     if (tagId) {
       const tasks = await getTasks(tagId);
-      genNotes(version, tasks);
-      console.log(chalk.green(`Release notes written to ./releases/v${version}.md`));
+      await genNotes(version, tasks);
     }
   }
 });

@@ -13,6 +13,7 @@
     "csvtojson": "^1.1.9",
     "dotenv": "^4.0.0",
     "latest": "^0.2.0",
+    "marked": "^0.3.12",
     "node-fetch": "^1.7.3",
     "prompt": "^1.0.0"
   }
