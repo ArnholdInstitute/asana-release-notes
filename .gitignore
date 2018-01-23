@@ -2,3 +2,4 @@ node_modules
 **/*.log
 releases/*
 !releases/README.md
+.env
