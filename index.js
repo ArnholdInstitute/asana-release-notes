@@ -3,14 +3,16 @@ const csv = require('csvtojson');
 const fetch = require('node-fetch');
 const fs = require('fs');
 const marked = require('marked');
+const mkdirp = require('mkdirp');
 const pdf = require('html-pdf');
 const prompt = require('prompt');
 const { promisify } = require('util');
 const { wrapBody } = require('./template');
 
 // use some async stuff where possible
-const writeFile = promisify(fs.writeFile);
+const mkdir = promisify(mkdirp);
 const toHTML = promisify(marked);
+const writeFile = promisify(fs.writeFile);
 
 // load in environment variables
 require('dotenv').config()
@@ -42,11 +44,11 @@ const getTagId = async (tag) => {
       });
     }
   } catch (err) {
-    logError('An error occurred while resolving the version tag id.');
+    logError('An error occurred while resolving the version tag id');
   }
 
   if (!tagId) {
-    logError(`The tag ${tag} was not found.`);
+    logError(`The tag ${tag} was not found`);
   }
   return tagId;
 };
@@ -64,7 +66,7 @@ const getTasks = async (tagId) => {
       ({ data } = await response.json());
     }
   } catch (err) {
-    logError('An error occurred while searching for tasks.');
+    logError('An error occurred while searching for tasks');
   }
   // filter out any tasks that don't belong to the defined project
   return data.filter(o => !!o.projects.find(oo => `${oo.id}` === ASANA_PROJECT_ID));
@@ -82,39 +84,49 @@ const genNotes = async (version, tasks = []) => {
       `* [\`${id}\`](${ASANA_PROJECT_URL}/${id}) - ${name}`
     )).join('\n')}
   `.replace(/ {2,}/g, ''); // replace groups of 2 or more spaces with an empty string for proper formatting
+
   const htmlBody = await toHTML(text.replace(/&nbsp;/g, '<br><br>'));  // generate an html body from the text
+  const dir = `./releases/v${version}`;
+  const filePath = `${dir}/v${version}`;
+
+  try {
+    await mkdir(dir);
+  } catch (err) {
+    logError('An error occurred while creating the version directory');
+    return;
+  }
 
   // write the text directory into the markdown file
-  writeMD(version, text);
+  writeMD(filePath, text);
   // write the html file
-  writeHTML(version, htmlBody);
+  writeHTML(filePath, htmlBody);
   // write the pdf file
-  writePDF(version, htmlBody);
+  writePDF(filePath, htmlBody);
 }
 
 // write the markdown file out to the releases directory
-const writeMD = async (version, text) => {
+const writeMD = async (filePath, text) => {
   try {
-    await writeFile(`./releases/v${version}.md`, text);
-    console.log(chalk.green(`Release notes written to ./releases/v${version}.md`));
+    await writeFile(`${filePath}.md`, text);
+    console.log(chalk.green(`Markdown file written successfully`));
   } catch (err) {
-    logError(`An error occurred while writing ./releases/v${version}.md`);
+    logError(`An error occurred while writing the markdown file`);
   }
 };
 
 // write the html file out to the releases directory
-const writeHTML = async (version, body) => {
+const writeHTML = async (filePath, body) => {
   const html = wrapBody(body, 16);
   try {
-    await writeFile(`./releases/v${version}.html`, html);
-    console.log(chalk.green(`Release notes written to ./releases/v${version}.html`));
+    await writeFile(`${filePath}.html`, html);
+    console.log(chalk.green(`HTML file written successfully`));
   } catch (err) {
-    logError(`An error occurred while writing ./releases/v${version}.html`);
+    logError(`An error occurred while writing the HTML file`);
   }
 };
 
 // write the pdf file out to the releases directory
-const writePDF = (version, body) => {
+const writePDF = (filePath, body) => {
   const html = wrapBody(body, 10);
   pdf.create(html, {
     border: {
@@ -123,12 +135,12 @@ const writePDF = (version, body) => {
       bottom: "0.25in",
       left: "0.5in"
     },
-  }).toFile(`./releases/v${version}.pdf`, (err) => {
+  }).toFile(`${filePath}.pdf`, (err) => {
     if (err) {
-      logError(`An error occurred while writing ./releases/v${version}.pdf`);
+      logError(`An error occurred while writing the PDF file`);
       return;
     }
-    console.log(chalk.green(`Release notes written to ./releases/v${version}.pdf`));
+    console.log(chalk.green(`PDF file written successfully`));
   });
 };
 

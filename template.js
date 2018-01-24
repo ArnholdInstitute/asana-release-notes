@@ -1,47 +1,5 @@
-// const githubCSS = require('github-markdown-css');
-
-
-// convert to html and write the file out to the releases directory
-/*
-marked(md.replace(/&nbsp;/g, '<br><br>'), (err, content) => {
-  if (err) throw err;
-
-  const doc = `
-  <!doctype html>
-  <html>
-    <meta charset="utf-8"/>
-    <title>ATLAS Release Notes</title>
-    <style>
-      .markdown-body {
-        box-sizing: border-box;
-        min-width: 200px;
-        max-width: 980px;
-        margin: 0 auto;
-        padding: 45px;
-      }
-
-      @media (max-width: 767px) {
-        .markdown-body {
-          padding: 15px;
-        }
-      }
-    </style>
-  <head>
-  </head>
-  <body>
-    ${content}
-  </body>
-  </html>
-  `;
-  fs.writeFile(`./releases/v${version}.html`, doc, (err) => {
-    if (err) throw err;
-  });
-});
-*/
-
 module.exports.wrapBody = (content, fontSize) => (
-`
-<!doctype html>
+`<!doctype html>
 <html>
   <meta charset="utf-8"/>
   <title>ATLAS Release Notes</title>
