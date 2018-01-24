@@ -1,3 +1,4 @@
+// yup, tons of dependencies.  It's a command line tool, I don't care.
 const chalk = require('chalk');
 const csv = require('csvtojson');
 const fetch = require('node-fetch');
@@ -8,6 +9,8 @@ const pdf = require('html-pdf');
 const prompt = require('prompt');
 const { promisify } = require('util');
 const { wrapBody } = require('./template');
+
+const moment = require('moment');
 
 // use some async stuff where possible
 const mkdir = promisify(mkdirp);
@@ -74,15 +77,19 @@ const getTasks = async (tagId) => {
 
 // generates the release notes and calls the functions to write out the files
 const genNotes = async (version, tasks = []) => {
+  const now = moment();
   const text =
   `# Version ${version} Release Notes
-  Tasks may be viewed directly on Asana by clicking on their taskId
+  _Tasks may be viewed directly on Asana by clicking their taskId_
   &nbsp;
   ##### Items completed:
   ${tasks.sort(({ id: a }, { id: b }) => a > b ? 1 : (a < b ? -1 : 0))
     .map(({ id, name }) => (
       `* [\`${id}\`](${ASANA_PROJECT_URL}/${id}) - ${name}`
-    )).join('\n')}
+  )).join('\n')}
+
+  &nbsp;
+  _Generated ${now.format('MM/DD/YYYY')} at ${now.format('hh:mm A')}_
   `.replace(/ {2,}/g, ''); // replace groups of 2 or more spaces with an empty string for proper formatting
 
   const htmlBody = await toHTML(text.replace(/&nbsp;/g, '<br><br>'));  // generate an html body from the text
