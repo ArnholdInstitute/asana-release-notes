@@ -1,9 +1,8 @@
-// yup, tons of dependencies.  It's a command line tool, I don't care.
 const chalk = require('chalk');
 const csv = require('csvtojson');
 const fetch = require('node-fetch');
 const fs = require('fs');
-const marked = require('marked');
+const minimist = require('minimist');
 const mkdirp = require('mkdirp');
 const moment = require('moment');
 const pdf = require('html-pdf');
@@ -13,7 +12,6 @@ const { wrapBody } = require('./template');
 
 // use some async stuff where possible
 const mkdir = promisify(mkdirp);
-const toHTML = promisify(marked);
 const writeFile = promisify(fs.writeFile);
 
 // load in environment variables
@@ -75,12 +73,17 @@ const getTasks = async (tagId) => {
 };
 
 // generates the release notes and calls the functions to write out the files
-const genNotes = async (version, tasks = []) => {
+const genNotes = async (version, type, tasks = []) => {
   const now = moment();
   const text =
-  `# Version ${version} Release Notes
+  `# ATLAS ${version} Release Notes
   _Tasks may be viewed directly on Asana by clicking their taskId_
   &nbsp;
+  ##### Release Type:
+  - [${type === 'major' ? 'x' : ' '}] Major
+  - [${type === 'minor' ? 'x' : ' '}] Minor
+  - [${type === 'patch' ? 'x' : ' '}] Patch
+
   ##### Items completed:
   ${tasks.sort(({ id: a }, { id: b }) => a > b ? 1 : (a < b ? -1 : 0))
     .map(({ id, name }) => (
@@ -90,11 +93,12 @@ const genNotes = async (version, tasks = []) => {
   &nbsp;
   _Generated ${now.format('MM/DD/YYYY')} at ${now.format('hh:mm A')}_
   `.replace(/ {2,}/g, ''); // replace groups of 2 or more spaces with an empty string for proper formatting
+  const htmlBody = await render(text);  // generate an html body from the text
 
-  const htmlBody = await toHTML(text.replace(/&nbsp;/g, '<br><br>'));  // generate an html body from the text
   const dir = `./releases/v${version}`;
   const filePath = `${dir}/v${version}`;
 
+  // make a subdirectory for this release
   try {
     await mkdir(dir);
   } catch (err) {
@@ -104,11 +108,38 @@ const genNotes = async (version, tasks = []) => {
 
   // write the text directory into the markdown file
   writeMD(filePath, text);
-  // write the html file
-  writeHTML(filePath, htmlBody);
-  // write the pdf file
-  writePDF(filePath, htmlBody);
+
+  // only write the html and pdf files if rendering was successful.
+  if (htmlBody) {
+    // write the html file
+    writeHTML(filePath, htmlBody);
+    // write the pdf file
+    writePDF(filePath, htmlBody);
+  }
 }
+
+const render = async (text) => {
+  let data;
+  console.log(chalk.yellow('Rendering markdown...'));
+
+  try {
+    const response = await fetch('https://api.github.com/markdown', {
+      method: 'POST',
+      body: JSON.stringify({
+        text: text,
+        mode: 'gfm',
+      }),
+    });
+    if (response.ok) {
+      data = await response.text();
+    } else {
+      logError('An error occurred while rendering the markdown');
+    }
+  } catch (err) {
+    logError('An error occurred while rendering the markdown');
+  }
+  return data;
+};
 
 // write the markdown file out to the releases directory
 const writeMD = async (filePath, text) => {
@@ -151,29 +182,37 @@ const writePDF = (filePath, body) => {
 };
 
 // prompt the user for a version string
-const argVersion = process.argv[2];
-if (argVersion) {
-  prompt.override = { version: argVersion };
-}
+const argv = minimist(process.argv.slice(2));
+prompt.override = { version: argv.v, type: argv.t };
 
 prompt.message = '';
 prompt.delimiter = '';
 
 prompt.start();
-prompt.get([{
-  name: 'version',
-  type: 'string',
-  description: chalk.green('Enter the version number (ex. 1.0.0):'),
-  pattern: /^\d+\.\d+\.\d+$/,
-  message: 'The version must be in the format x.x.x',
-  required: true,
-}], async (err, result) => {
+prompt.get([
+  {
+    name: 'version',
+    type: 'string',
+    description: chalk.green('Enter the version number (ex. 1.0.0):'),
+    pattern: /^\d+\.\d+\.\d+$/,
+    message: 'The version must be in the format x.x.x',
+    required: true,
+  },
+  {
+    name: 'type',
+    type: 'string',
+    description: chalk.green('Enter the release type (major|minor|patch):'),
+    pattern: /^major$|^minor$|^patch$/i,
+    message: 'You must enter a valid release type',
+    required: true,
+  }
+], async (err, result) => {
   if (result) {
-    const { version } = result;
+    const { version, type } = result;
     const tagId = await getTagId(`v${version}`);
     if (tagId) {
       const tasks = await getTasks(tagId);
-      genNotes(version, tasks);
+      genNotes(version, type.toLowerCase(), tasks);
     }
   }
 });

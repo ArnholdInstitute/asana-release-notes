@@ -1,7 +1,7 @@
 {
   "name": "asana-release-notes",
   "version": "0.0.1",
-  "description": "Generate release notes from an Asana export",
+  "description": "Generate release notes from Asana tasks with a version tag",
   "main": "index.js",
   "author": "Kyle Landell <kyle.landell@gmail.com>",
   "license": "MIT",
@@ -13,8 +13,7 @@
     "csvtojson": "^1.1.9",
     "dotenv": "^4.0.0",
     "html-pdf": "^2.2.0",
-    "latest": "^0.2.0",
-    "marked": "^0.3.12",
+    "minimist": "^1.2.0",
     "mkdirp": "^0.5.1",
     "moment": "^2.20.1",
     "node-fetch": "^1.7.3",
