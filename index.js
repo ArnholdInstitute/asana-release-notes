@@ -5,12 +5,11 @@ const fetch = require('node-fetch');
 const fs = require('fs');
 const marked = require('marked');
 const mkdirp = require('mkdirp');
+const moment = require('moment');
 const pdf = require('html-pdf');
 const prompt = require('prompt');
 const { promisify } = require('util');
 const { wrapBody } = require('./template');
-
-const moment = require('moment');
 
 // use some async stuff where possible
 const mkdir = promisify(mkdirp);
