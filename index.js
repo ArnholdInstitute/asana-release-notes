@@ -5,7 +5,7 @@ const fs = require('fs');
 const minimist = require('minimist');
 const mkdirp = require('mkdirp');
 const moment = require('moment');
-const pdf = require('html-pdf');
+const htmlPdf = require('html-pdf-chrome');
 const prompt = require('prompt');
 const { promisify } = require('util');
 const { wrapBody } = require('./template');
@@ -163,22 +163,22 @@ const writeHTML = async (filePath, body) => {
 };
 
 // write the pdf file out to the releases directory
-const writePDF = (filePath, body) => {
-  const html = wrapBody(body, 10);
-  pdf.create(html, {
-    border: {
-      top: "0.25in",
-      right: "0.5in",
-      bottom: "0.25in",
-      left: "0.5in"
-    },
-  }).toFile(`${filePath}.pdf`, (err) => {
-    if (err) {
-      logError(`An error occurred while writing the PDF file`);
-      return;
-    }
+const writePDF = async (filePath, body) => {
+  const html = wrapBody(body, 12);
+  try {
+    const pdf = await htmlPdf.create(html, {
+      border: {
+        top: "0.25in",
+        right: "0.5in",
+        bottom: "0.25in",
+        left: "0.5in"
+      },
+    });
+    await pdf.toFile(`${filePath}.pdf`);
     console.log(chalk.green(`PDF file written successfully`));
-  });
+  } catch (err) {
+    logError(`An error occurred while writing the PDF file`);
+  }
 };
 
 // prompt the user for a version string
