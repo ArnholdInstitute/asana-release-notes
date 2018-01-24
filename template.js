@@ -39,7 +39,7 @@ marked(md.replace(/&nbsp;/g, '<br><br>'), (err, content) => {
 });
 */
 
-module.exports.wrapBody = content => (
+module.exports.wrapBody = (content, fontSize) => (
 `
 <!doctype html>
 <html>
@@ -52,6 +52,7 @@ module.exports.wrapBody = content => (
       max-width: 980px;
       margin: 0 auto;
       padding: 45px;
+      font-size: ${fontSize}px !important;
     }
 
     @media (max-width: 767px) {

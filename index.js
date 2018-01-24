@@ -2,11 +2,13 @@ const chalk = require('chalk');
 const csv = require('csvtojson');
 const fetch = require('node-fetch');
 const fs = require('fs');
-const marked= require('marked');
+const marked = require('marked');
+const pdf = require('html-pdf');
 const prompt = require('prompt');
 const { promisify } = require('util');
 const { wrapBody } = require('./template');
 
+// use some async stuff where possible
 const writeFile = promisify(fs.writeFile);
 const toHTML = promisify(marked);
 
@@ -68,9 +70,9 @@ const getTasks = async (tagId) => {
   return data.filter(o => !!o.projects.find(oo => `${oo.id}` === ASANA_PROJECT_ID));
 };
 
-// generates release notes from the Asana tasks
+// generates the release notes and calls the functions to write out the files
 const genNotes = async (version, tasks = []) => {
-  const md =
+  const text =
   `# Version ${version} Release Notes
   Tasks may be viewed directly on Asana by clicking on their taskId
   &nbsp;
@@ -80,27 +82,55 @@ const genNotes = async (version, tasks = []) => {
       `* [\`${id}\`](${ASANA_PROJECT_URL}/${id}) - ${name}`
     )).join('\n')}
   `.replace(/ {2,}/g, ''); // replace groups of 2 or more spaces with an empty string for proper formatting
+  const htmlBody = await toHTML(text.replace(/&nbsp;/g, '<br><br>'));  // generate an html body from the text
 
-  // write the markdown file out to the releases directory
+  // write the text directory into the markdown file
+  writeMD(version, text);
+  // write the html file
+  writeHTML(version, htmlBody);
+  // write the pdf file
+  writePDF(version, htmlBody);
+}
+
+// write the markdown file out to the releases directory
+const writeMD = async (version, text) => {
   try {
-    await writeFile(`./releases/v${version}.md`, md);
+    await writeFile(`./releases/v${version}.md`, text);
     console.log(chalk.green(`Release notes written to ./releases/v${version}.md`));
   } catch (err) {
     logError(`An error occurred while writing ./releases/v${version}.md`);
   }
+};
 
-  // convert the markdown to html and write to the releases directory
+// write the html file out to the releases directory
+const writeHTML = async (version, body) => {
+  const html = wrapBody(body, 16);
   try {
-    const body = await toHTML(md.replace(/&nbsp;/g, '<br><br>'));
-    const html = wrapBody(body);
-
-    // write the html file out to the releases directory
     await writeFile(`./releases/v${version}.html`, html);
     console.log(chalk.green(`Release notes written to ./releases/v${version}.html`));
   } catch (err) {
     logError(`An error occurred while writing ./releases/v${version}.html`);
   }
-}
+};
+
+// write the pdf file out to the releases directory
+const writePDF = (version, body) => {
+  const html = wrapBody(body, 10);
+  pdf.create(html, {
+    border: {
+      top: "0.25in",
+      right: "0.5in",
+      bottom: "0.25in",
+      left: "0.5in"
+    },
+  }).toFile(`./releases/v${version}.pdf`, (err) => {
+    if (err) {
+      logError(`An error occurred while writing ./releases/v${version}.pdf`);
+      return;
+    }
+    console.log(chalk.green(`Release notes written to ./releases/v${version}.pdf`));
+  });
+};
 
 // prompt the user for a version string
 const argVersion = process.argv[2];
@@ -125,7 +155,7 @@ prompt.get([{
     const tagId = await getTagId(`v${version}`);
     if (tagId) {
       const tasks = await getTasks(tagId);
-      await genNotes(version, tasks);
+      genNotes(version, tasks);
     }
   }
 });
