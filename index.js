@@ -9,22 +9,24 @@ const prompt = require('prompt');
 const { promisify } = require('util');
 const { wrapBody } = require('./template');
 
-// use some async stuff where possible
+// use async stuff where possible
 const mkdir = promisify(mkdirp);
 const writeFile = promisify(fs.writeFile);
+
+// consistently format error messages
+const logError = msg => console.log(`${chalk.red('error')}:   ${msg}`);
 
 // load in environment variables
 require('dotenv').config()
 const { ASANA_ACCESS_TOKEN, ASANA_API_VERSION, ASANA_PROJECT_ID } = process.env;
 if (!(ASANA_ACCESS_TOKEN && ASANA_API_VERSION && ASANA_PROJECT_ID)) {
-  console.log(`${chalk.red('error')}:   The .env file incomplete.  Make sure it includes ASANA_ACCESS_TOKEN, ASANA_API_VERSION and ASANA_PROJECT_ID.`);
+  const errorMsg = 'The .env file incomplete.  ' +
+    'Make sure it includes ASANA_ACCESS_TOKEN, ASANA_API_VERSION, and ASANA_PROJECT_ID.'
+  logError(errorMsg);
   return;
 }
 const ASANA_API_URL = `https://app.asana.com/api/${ASANA_API_VERSION}`;
 const ASANA_PROJECT_URL=`https://app.asana.com/0/${ASANA_PROJECT_ID}`;
-
-// consistently format error messages
-const logError = msg => console.log(`${chalk.red('error')}:   ${msg}`);
 
 // utility function for making rest api calls
 const callAPI = async ({
@@ -207,7 +209,7 @@ prompt.get([
   {
     name: 'version',
     type: 'string',
-    description: chalk.green('Enter the version number (ex. 1.0.0):'),
+    description: chalk.magenta('Enter the version number (ex. 1.0.0):'),
     pattern: /^\d+\.\d+\.\d+$/,
     message: 'The version must be in the format x.x.x',
     required: true,
@@ -215,7 +217,7 @@ prompt.get([
   {
     name: 'type',
     type: 'string',
-    description: chalk.green('Enter the release type (major|minor|patch):'),
+    description: chalk.magenta('Enter the release type (major|minor|patch):'),
     pattern: /^major$|^minor$|^patch$/i,
     message: 'You must enter a valid release type',
     required: true,
