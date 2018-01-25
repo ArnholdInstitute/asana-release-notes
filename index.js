@@ -1,11 +1,10 @@
 const chalk = require('chalk');
-const csv = require('csvtojson');
 const fetch = require('node-fetch');
 const fs = require('fs');
+const htmlPdf = require('html-pdf-chrome');
 const minimist = require('minimist');
 const mkdirp = require('mkdirp');
 const moment = require('moment');
-const htmlPdf = require('html-pdf-chrome');
 const prompt = require('prompt');
 const { promisify } = require('util');
 const { wrapBody } = require('./template');
@@ -27,118 +26,130 @@ const ASANA_PROJECT_URL=`https://app.asana.com/0/${ASANA_PROJECT_ID}`;
 // consistently format error messages
 const logError = msg => console.log(`${chalk.red('error')}:   ${msg}`);
 
-// gets the Asana tagId for a given version tag
-const getTagId = async (tag) => {
-  let tagId;
-  console.log(chalk.yellow('Resolving version tag id...'));
-
+// utility function for making rest api calls
+const callAPI = async ({
+  body,
+  errorMsg = 'An error has occurred',
+  headers,
+  method = 'GET',
+  parser = 'json',
+  url,
+} = {}) => {
+  let data;
   try {
-    const headers = new fetch.Headers({ Authorization: `Bearer ${ASANA_ACCESS_TOKEN}` });
-    const response = await fetch(`${ASANA_API_URL}/tags`, { headers });
+    // apply options for the call
+    const opts = { method };
+    if (headers) { opts.headers = new fetch.Headers(headers); }
+    if (body) { opts.body = body; }
+
+    // make the call
+    response = await fetch(url, opts);
     if (response.ok) {
-      const { data } = await response.json();
-      data.forEach(({ id, name }) => {
-        if (name === tag) {
-          tagId = id;
-        }
-      });
+      data = await response[parser]();
+    } else {
+      logError(`${errorMsg} - ${response.status} ${response.statusText}`);
     }
   } catch (err) {
-    logError('An error occurred while resolving the version tag id');
+    logError(errorMsg);
+    console.log(err);
   }
+  return data;
+};
 
-  if (!tagId) {
-    logError(`The tag ${tag} was not found`);
+// gets the Asana tagId for a given version tag
+const getTagId = async (tag) => {
+  console.log(chalk.yellow('Resolving version tag id...'));
+  const { data } = await callAPI({
+    url: `${ASANA_API_URL}/tags`,
+    headers: { Authorization: `Bearer ${ASANA_ACCESS_TOKEN}` },
+    errorMsg: 'An error occurred while resolving the version tag id',
+  });
+
+  // parse the data to find the tagId
+  let tagId;
+  if (data && data.length) {
+    data.forEach(({ id, name }) => {
+      if (name === tag) {
+        tagId = id;
+      }
+    });
+    if (!tagId) { logError(`The tag ${tag} was not found`); }
   }
   return tagId;
 };
 
 // gets all tasks that have a given tagId
 const getTasks = async (tagId) => {
-  let data;
   console.log(chalk.yellow('Searching for tasks...'));
+  const { data } = await callAPI({
+    url: `${ASANA_API_URL}/tasks?tag=${tagId}&opt_fields=id,name,projects`,
+    headers: { Authorization: `Bearer ${ASANA_ACCESS_TOKEN}` },
+    errorMsg: 'An error occurred while searching for tasks',
+  }) || [];
 
-  try {
-    const headers = new fetch.Headers({ Authorization: `Bearer ${ASANA_ACCESS_TOKEN}` });
-    // additional fields can be returned with the opt_fields parameter
-    const response = await fetch(`${ASANA_API_URL}/tasks?tag=${tagId}&opt_fields=id,name,projects`, { headers });
-    if (response.ok) {
-      ({ data } = await response.json());
-    }
-  } catch (err) {
-    logError('An error occurred while searching for tasks');
-  }
   // filter out any tasks that don't belong to the defined project
   return data.filter(o => !!o.projects.find(oo => `${oo.id}` === ASANA_PROJECT_ID));
 };
 
+// render the markdown using the GitHub api
+const render = async (text) => {
+  console.log(chalk.yellow('Rendering markdown...'));
+  return await callAPI({
+    url: 'https://api.github.com/markdown',
+    errorMsg: 'An error occurred while rendering the markdown as HTML',
+    method: 'POST',
+    body: JSON.stringify({
+      text: text,
+      mode: 'gfm',
+    }),
+    parser: 'text',
+  });
+};
+
 // generates the release notes and calls the functions to write out the files
 const genNotes = async (version, type, tasks = []) => {
-  const now = moment();
-  const text =
-  `# ATLAS ${version} Release Notes
-  _Tasks may be viewed directly on Asana by clicking their taskId_
-  &nbsp;
-  ##### Release Type:
-  - [${type === 'major' ? 'x' : ' '}] Major
-  - [${type === 'minor' ? 'x' : ' '}] Minor
-  - [${type === 'patch' ? 'x' : ' '}] Patch
-
-  ##### Items completed:
-  ${tasks.sort(({ id: a }, { id: b }) => a > b ? 1 : (a < b ? -1 : 0))
-    .map(({ id, name }) => (
-      `* [\`${id}\`](${ASANA_PROJECT_URL}/${id}) - ${name}`
-  )).join('\n')}
-
-  &nbsp;
-  _Generated ${now.format('MM/DD/YYYY')} at ${now.format('hh:mm A')}_
-  `.replace(/ {2,}/g, ''); // replace groups of 2 or more spaces with an empty string for proper formatting
-  const htmlBody = await render(text);  // generate an html body from the text
-
   const dir = `./releases/v${version}`;
   const filePath = `${dir}/v${version}`;
+  const text = createContent(version, type, tasks);
 
   // make a subdirectory for this release
   try {
     await mkdir(dir);
   } catch (err) {
     logError('An error occurred while creating the version directory');
+    console.log(err);
     return;
   }
 
-  // write the text directory into the markdown file
-  writeMD(filePath, text);
+  writeMD(filePath, text); // write the md file
 
   // only write the html and pdf files if rendering was successful.
+  const htmlBody = await render(text);  // generate an html body from the text
   if (htmlBody) {
-    // write the html file
-    writeHTML(filePath, htmlBody);
-    // write the pdf file
-    writePDF(filePath, htmlBody);
+    writeHTML(filePath, htmlBody); // write the html file
+    writePDF(filePath, htmlBody); // write the pdf file
   }
-}
+};
 
-const render = async (text) => {
-  let data;
-  console.log(chalk.yellow('Rendering markdown...'));
-
-  try {
-    const response = await fetch('https://api.github.com/markdown', {
-      method: 'POST',
-      body: JSON.stringify({
-        text: text,
-        mode: 'gfm',
-      }),
-    });
-    if (response.ok) {
-      data = await response.text();
-    } else {
-      logError('An error occurred while rendering the markdown');
-    }
-  } catch (err) {
-    logError('An error occurred while rendering the markdown');
-  }
-  return data;
+// creates the content for the release notes
+const createContent = (version, type, tasks) => {
+  const now = moment();
+  return `# ATLAS ${version} Release Notes
+  _Tasks may be viewed directly on Asana by clicking their taskId_
+  &nbsp;
+  ##### Release Type:
+  - [${type === 'major' ? 'x' : ' '}] Major
+  - [${type === 'minor' ? 'x' : ' '}] Minor
+  - [${type === 'patch' ? 'x' : ' '}] Patch
+  &nbsp;
+  ##### Items completed:
+  ${tasks.sort(({ id: a }, { id: b }) => a > b ? 1 : (a < b ? -1 : 0))
+    .map(({ id, name }) => (
+      `* [\`${id}\`](${ASANA_PROJECT_URL}/${id}) - ${name}`
+  )).join('\n')} \n
+  &nbsp;
+  _Generated ${now.format('MM/DD/YYYY')} at ${now.format('hh:mm A')}_
+  `.replace(/ {2,}/g, ''); // replace groups of 2 or more spaces with an empty string for proper formatting
 };
 
 // write the markdown file out to the releases directory
@@ -148,6 +159,7 @@ const writeMD = async (filePath, text) => {
     console.log(chalk.green(`Markdown file written successfully`));
   } catch (err) {
     logError(`An error occurred while writing the markdown file`);
+    console.log(err);
   }
 };
 
@@ -159,6 +171,7 @@ const writeHTML = async (filePath, body) => {
     console.log(chalk.green(`HTML file written successfully`));
   } catch (err) {
     logError(`An error occurred while writing the HTML file`);
+    console.log(err);
   }
 };
 
@@ -178,6 +191,7 @@ const writePDF = async (filePath, body) => {
     console.log(chalk.green(`PDF file written successfully`));
   } catch (err) {
     logError(`An error occurred while writing the PDF file`);
+    console.log(err);
   }
 };
 
